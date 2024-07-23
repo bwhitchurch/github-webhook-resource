@@ -1,7 +1,9 @@
-const Ajv = require('ajv');
-const ajv = new Ajv({ allErrors: true, jsonPointers: true });
-require('ajv-errors')(ajv);
-require('ajv-keywords')(ajv, 'transform');
+import Ajv from 'ajv';
+import ajvErrors from 'ajv-errors';
+import ajvKeywords from 'ajv-keywords';
+const ajv = new Ajv({ allErrors: true});
+ajvErrors(ajv);
+ajvKeywords(ajv, ['transform']);
 
 const validOperations = ['create', 'delete'];
 const validContentTypes = ['form', 'json'];
@@ -89,13 +91,10 @@ function fail(test) {
     let message = 'Invalid resource configuration:\n';
 
     test.errors.forEach(err => {
-        message += `    ${err.dataPath.replace(/^\//, '')
-                                      .replace(/\//g, '.')
-                                      .replace(/.(\d+$)/, '[$1]')
-                        || 'root configuration'} ${err.message}\n`;
+        message += `${err.message}\n`;
     });
 
     throw new Error(message);
 }
 
-module.exports = { env, config };
+export { env, config };
