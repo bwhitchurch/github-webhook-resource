@@ -2,9 +2,9 @@
 
 'use strict';
 
-const _ = require('lodash');
-const request = require('request-promise');
-const validate = require('./validate');
+import { Octokit } from '@octokit/core';
+import _ from 'lodash';
+import * as validate from './validate.js';
 const env = process.env;
 const stdin = process.stdin;
 
@@ -79,7 +79,7 @@ function buildInstanceVariables(params) {
 
 async function processWebhook(source, params) {
 
-    const webhookEndpoint = `${source.github_api}/repos/${params.org}/${params.repo}/hooks`;
+    const webhookEndpoint = `/repos/${params.org}/${params.repo}/hooks`;
     const url = buildUrl(source, params)
 
     log(`Webhook location: ${webhookEndpoint}\n` +
@@ -88,24 +88,40 @@ async function processWebhook(source, params) {
     const config = {
         'url': url,
         'content_type': params.payload_content_type ? params.payload_content_type : 'json',
-        'secret': params.payload_secret
+        'insecure_ssl': 0
     };
 
-    const body = {
-        'name': 'web',  // NOTE: Github plans to deprecate this field. https://developer.github.com/v3/repos/hooks/#create-a-hook
+    let body = {
+        'owner': params.org,
+        'repo': params.repo,
+        'name': 'web',
+        'active': true,
         'config': config,
-        'events': params.events
+        'events': params.events,
+        'headers': {
+            'X-GitHub-Api-Version': '2022-11-28'
+        }
     };
 
-    const existingHookList = await getExistingHooks(webhookEndpoint, source.github_token);
-    const existingHook = existingHookList.find(hook => _.isMatch(hook.config, config));
+    const octokit = new Octokit({
+        auth: source.github_token
+    })
+
+    const existingHookResponse = await octokit.request('GET ' + webhookEndpoint, {owner: params.org, repo: params.repo});
+    const existingHookList = existingHookResponse.data;
+    const existingHook = existingHookList.find(hook => _.isMatch(hook.config.url, config.url));
+
 
     switch (params.operation) {
         case 'create':
             if (existingHook == null) {
-                createWebhook(webhookEndpoint, 'POST', source.github_token, body);
-            } else if (!_.isEqual(_.sortBy(existingHook.events), _.sortBy(body.events))) {
-                updateWebhook(`${webhookEndpoint}/${existingHook.id}`, 'PATCH', source.github_token, body, existingHook)
+                const result = await octokit.request('POST ' + webhookEndpoint, body)
+                emit(result.data);
+            }
+            else if (!_.isEqual(_.sortBy(existingHook.events), _.sortBy(body.events))) {
+                body.hook_id = existingHook.id;
+                const result = await octokit.request('PATCH ' + webhookEndpoint + '/' + existingHook.id, body)
+                emit(result.data);
             } else {
                 log('Webhook already exists');
                 emit(existingHook);
@@ -116,83 +132,12 @@ async function processWebhook(source, params) {
                 log('Webhook does not exist');
                 emit({id: Date.now()});
             } else {
-                deleteWebhook(webhookEndpoint, existingHook, source.github_token);
+                body.hook_id = existingHook.id;
+                const result = await octokit.request('DELETE ' + webhookEndpoint + '/' + existingHook.id)
+                emit({id: Date.now()});
             }
             break;
     }
-}
-
-function getExistingHooks(webhookEndpoint, githubToken) {
-    return callGithub(webhookEndpoint, 'GET', githubToken)
-        .then(res => JSON.parse(res.body));
-}
-
-function createWebhook(webhookEndpoint, method, githubToken, body) {
-    const bodyString = JSON.stringify(body);
-
-    callGithub(webhookEndpoint, method, githubToken, bodyString)
-        .then(res => {
-            log(`Successfully created webhook: ${res.body}`);
-            emit(JSON.parse(res.body));
-        })
-        .catch(error => {
-            log(error.stack);
-            process.exit(1);
-        });
-}
-
-function updateWebhook(webhookEndpoint, method, githubToken, body, existingHook) {
-    const bodyString = JSON.stringify(body);
-
-    callGithub(webhookEndpoint, method, githubToken, bodyString)
-        .then(res => {
-            log(`Successfully updated webhook configuration from:\n${JSON.stringify(existingHook)}\n\nto:\n${res.body}`);
-            emit(JSON.parse(res.body));
-        })
-        .catch(error => {
-            log(error.stack);
-            process.exit(1);
-        });
-}
-
-function deleteWebhook(webhookEndpoint, webhook, githubToken) {
-    const deleteUri = `${webhookEndpoint}/${webhook.id}`;
-
-    callGithub(deleteUri, 'DELETE', githubToken)
-        .then(() => {
-            log('Webhook deleted successfully');
-            emit(webhook);
-        });
-}
-
-function callGithub(uri, method, githubToken, body) {
-    const options = {
-        uri: uri,
-        method: method,
-        body: body,
-        headers: {
-            'Accept': 'application/vnd.github.v3+json',
-            'Content-Type': 'application/json',
-            'Authorization': `token ${githubToken}`,
-            'User-Agent': 'node.js'
-        },
-        resolveWithFullResponse: true
-    };
-
-    return request(options)
-        .catch(err => {
-            log(`Error while calling Github: ${err.name}\n` +
-                `Response Status: ${err.statusCode}\n` +
-                `Message: ${JSON.stringify(JSON.parse(err.error), null, 2)}`);
-            if (err.statusCode === 404) {
-                log(`Response was 404:\n` +
-                    `    Your token's account must be an Administrator of your repo. ${uri.replace('//api.', '//')
-                                                                                          .replace('/repos', '')
-                                                                                          .replace('/hooks', '/settings/collaboration')}\n` +
-                    `    Additionally, your token must have the 'admin:repo_hook' scope. https://github.com/settings/tokens/new?scopes=admin:repo_hook`);
-            }
-            process.exit(1);
-        });
 }
 
 function emit(result) {
@@ -213,4 +158,4 @@ function log(message) {
     console.error(message);
 }
 
-module.exports = { buildInstanceVariables, buildUrl };
+export { buildInstanceVariables, buildUrl };
