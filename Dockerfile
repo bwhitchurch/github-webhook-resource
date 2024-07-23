@@ -1,10 +1,11 @@
-FROM node:16-alpine
-WORKDIR /opt/resource
-ADD bin .
-ADD bin/out.js out
-ADD package.json .
+FROM node:alpine
+ADD bin/ /opt/resource
+ADD package.json /opt/resource/package.json
 
+WORKDIR /opt/resource
 RUN NODE_ENV=production npm install --quiet
 RUN apk update \
   && apk add jq \
   && rm -rf /var/cache/apk/*
+RUN ln -sfn /opt/resource/out.js /opt/resource/out
+WORKDIR /root
