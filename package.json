@@ -6,8 +6,9 @@
     "type": "git",
     "url": "https://github.com/homedepot/github-webhook-resource.git"
   },
+  "type": "module",
   "engines": {
-    "node": "^16"
+    "node": ">20"
   },
   "scripts": {
     "pretest": "eslint --ignore-path .gitignore . && eslint bin/out.js",
@@ -18,18 +19,18 @@
   },
   "license": "ISC",
   "dependencies": {
-    "ajv": "^6.12.3",
-    "ajv-errors": "^1.0.1",
-    "ajv-keywords": "^3.4.0",
+    "@octokit/core": "^6.1.2",
+    "ajv": "^8.17.1",
+    "ajv-errors": "^3.0.0",
+    "ajv-keywords": "^5.1.0",
     "lodash": "^4.17.21",
-    "request": "^2.88.0",
-    "request-promise": "^4.2.2"
+    "request-promise": "^4.2.6"
   },
   "devDependencies": {
-    "coveralls": "^3.0.3",
-    "eslint": "^6.2.2",
-    "jest": "^24.1.0",
-    "js-combinatorics": "^0.5.4"
+    "coveralls": "^3.1.1",
+    "eslint": "^9.7.0",
+    "jest": "^29.7.0",
+    "js-combinatorics": "^2.1.2"
   },
   "jest": {
     "coverageReporters": [
